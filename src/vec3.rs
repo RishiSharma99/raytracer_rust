@@ -1,6 +1,8 @@
 use std::fmt::Display;
 use std::ops;
 
+use rand::Rng;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Vec3 {
     pub x: f64,
@@ -22,6 +24,23 @@ impl Vec3 {
     pub fn len_sqrd(&self) -> f64 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
+
+    pub fn rand(rng: &mut impl Rng) -> Vec3 {
+        Vec3::new(rng.random(), rng.random(), rng.random())
+    }
+
+    pub fn rand_in_range(rng: &mut impl Rng, min: f64, max: f64) -> Vec3 {
+        Vec3::new(
+            rng.random_range(min..max),
+            rng.random_range(min..max),
+            rng.random_range(min..max),
+        )
+    }
+
+    pub fn near_zero(&self) -> bool {
+        let eps = 1e-8;
+        f64::abs(self.x) < eps && f64::abs(self.y) < eps && f64::abs(self.z) < eps
+    }
 }
 
 #[inline]
@@ -40,11 +59,11 @@ pub fn len(p: Vec3) -> f64 {
     p.len()
 }
 
-pub const fn cross(lhs: &Vec3, rhs: &Vec3) -> Vec3 {
+pub const fn cross(lhs: Vec3, rhs: Vec3) -> Vec3 {
     Vec3::new(
         lhs.y * rhs.z - lhs.z * rhs.y,
-        lhs.z * rhs.x - lhs.x * rhs.x,
-        lhs.x * rhs.y - lhs.y * rhs.z,
+        lhs.z * rhs.x - lhs.x * rhs.z,
+        lhs.x * rhs.y - lhs.y * rhs.x,
     )
 }
 
@@ -105,7 +124,9 @@ impl ops::Add<Vec3> for f64 {
         rhs + self
     }
 }
-
+// -------------------------------------
+// Sub
+// -------------------------------------
 impl ops::Sub for Vec3 {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
@@ -144,6 +165,10 @@ impl ops::Sub<Vec3> for f64 {
         rhs - self
     }
 }
+
+// -------------------------------------
+// Mul
+// -------------------------------------
 
 impl ops::Mul<f64> for Vec3 {
     type Output = Vec3;
@@ -191,6 +216,18 @@ impl ops::Mul<Vec3> for f64 {
     }
 }
 
+impl ops::Mul<Vec3> for Vec3 {
+    type Output = Vec3;
+
+    fn mul(self, rhs: Vec3) -> Self::Output {
+        Vec3::new(self.x * rhs.x, self.y * rhs.y, self.z * rhs.z)
+    }
+}
+
+// -------------------------------------
+// Div
+// -------------------------------------
+
 impl ops::Div<f64> for Vec3 {
     type Output = Vec3;
 
@@ -198,6 +235,10 @@ impl ops::Div<f64> for Vec3 {
         Vec3::new(self.x / rhs, self.y / rhs, self.z / rhs)
     }
 }
+
+// -------------------------------------
+// Neg
+// -------------------------------------
 
 impl ops::Neg for Vec3 {
     type Output = Self;
@@ -207,6 +248,10 @@ impl ops::Neg for Vec3 {
     }
 }
 
+// -------------------------------------
+// Helpers
+// -------------------------------------
+
 impl Display for Vec3 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({},{})", self.x, self.y)
@@ -215,4 +260,29 @@ impl Display for Vec3 {
 
 pub fn lerp(start_value: &Vec3, end_value: &Vec3, t: f64) -> Vec3 {
     ((1.0 - t) * start_value) + (t * end_value)
+}
+
+pub fn rand_unit_vec(rng: &mut impl Rng) -> Vec3 {
+    loop {
+        let p = Vec3::rand_in_range(rng, -1.0, 1.0);
+        let lensq = p.len_sqrd();
+
+        if (1e-160 < lensq) && (lensq <= 1.0) {
+            return p / f64::sqrt(lensq);
+        }
+    }
+}
+
+pub fn rand_in_unit_disk(rng: &mut impl Rng) -> Vec3 {
+    loop {
+        let p = Vec3::new(
+            rng.random_range(-1.0..1.0),
+            rng.random_range(-1.0..1.0),
+            0.0,
+        );
+
+        if p.len_sqrd() < 1.0 {
+            return p;
+        }
+    }
 }

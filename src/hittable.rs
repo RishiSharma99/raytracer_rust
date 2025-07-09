@@ -1,41 +1,50 @@
 use std::ops::{self};
 
 use crate::{
+    material::Material,
     point::Point3,
     ray::Ray,
     vec3::{Vec3, dot},
 };
 
+#[derive(Clone)]
 pub struct HitRecord {
     pub p: Point3,
     pub n: Vec3,
     pub t: f64,
     pub front_face: bool,
+    pub mat: Material,
 }
 
 impl HitRecord {
-    pub fn new(p: Point3, n: Vec3, t: f64, front_face: bool) -> Self {
+    pub fn new(p: Point3, n: Vec3, t: f64, front_face: bool, mat: Material) -> Self {
         Self {
             p,
             n,
             t,
             front_face,
+            mat: mat,
         }
     }
 }
 
-pub trait Hittable {
+pub trait Hittable: Send + Sync {
     fn hit(&self, ray: &Ray, ray_range: ops::Range<f64>) -> Option<HitRecord>;
 }
 
 pub struct Sphere {
     pub center: Point3,
     pub radius: f64,
+    pub mat: Material,
 }
 
 impl Sphere {
-    pub fn new(center: Point3, radius: f64) -> Self {
-        Self { center, radius }
+    pub fn new(center: Point3, radius: f64, mat: Material) -> Self {
+        Self {
+            center,
+            radius,
+            mat: mat,
+        }
     }
 }
 
@@ -58,7 +67,13 @@ impl Hittable for Sphere {
                 let front_face = dot(*ray.direction(), out_normal) < 0.0;
                 let normal = if front_face { out_normal } else { -out_normal };
 
-                Some(HitRecord::new(ray.at(root), normal, root, front_face))
+                Some(HitRecord::new(
+                    ray.at(root),
+                    normal,
+                    root,
+                    front_face,
+                    self.mat,
+                ))
             } else {
                 None
             }
@@ -71,7 +86,7 @@ impl Hittable for Sphere {
 }
 
 pub struct Hittables {
-    objects: Vec<Box<dyn Hittable>>,
+    objects: Vec<Box<dyn Hittable + Send + Sync>>,
 }
 
 impl Hittables {

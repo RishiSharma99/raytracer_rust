@@ -11,7 +11,7 @@ impl Ray {
     }
 
     pub fn at(&self, timestep: f64) -> Point3 {
-        self.origin + self.direction * timestep
+        self.origin + (self.direction * timestep)
     }
 
     pub fn origin(&self) -> &Point3 {

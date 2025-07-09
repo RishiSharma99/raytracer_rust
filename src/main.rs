@@ -1,6 +1,8 @@
+mod camera;
 mod hittable;
 mod image;
 mod image_writer;
+mod material;
 mod point;
 mod ray;
 mod rbg;
@@ -8,67 +10,116 @@ mod vec3;
 
 use std::path::Path;
 
+use rand::{Rng, rng};
+
 use crate::{
-    hittable::{HitRecord, Hittable, Hittables, Sphere},
-    image::Image,
-    image_writer::{ImageWriter, ppm_writer::PpmFileWriter},
+    camera::Camera,
+    hittable::{Hittables, Sphere},
+    image_writer::{ImageWriter, PpmFileWriter},
+    material::Material,
     point::Point3,
-    ray::Ray,
     rbg::Rgb,
-    vec3::{Vec3, lerp, norm},
+    vec3::Vec3,
 };
 
-fn ray_color(ray: &Ray, world: &Hittables) -> Rgb {
-    match world.hit(ray, 0.00001..f64::INFINITY) {
-        Some(HitRecord { n, .. }) => 0.5 * Rgb::new(n.x + 1.0, n.y + 1.0, n.z + 1.0),
-        None => {
-            let u = norm(*ray.direction());
-            let blend = 0.5 * (u.y + 1.0);
+fn random_world() -> Hittables {
+    let mut world = Hittables::new();
 
-            lerp(&Rgb::new(1.0, 1.0, 1.0), &Rgb::new(0.5, 0.7, 1.0), blend)
+    let mut rng = rng();
+
+    //ground
+    world.add(Sphere::new(
+        Vec3::new(0.0, -1000.0, 0.0),
+        1000.0,
+        Material::Lambertian {
+            albedo: Rgb::new(0.5, 0.5, 0.5),
+        },
+    ));
+
+    for a in -11..11 {
+        for b in -11..11 {
+            let mat_choice = rng.random::<f64>();
+
+            let center = Vec3::new(
+                a as f64 + 0.9 * rng.random::<f64>(),
+                0.2,
+                b as f64 + 0.9 * rng.random::<f64>(),
+            );
+
+            if (center - Vec3::new(4.0, 0.2, 0.0)).len() > 0.9 {
+                if mat_choice < 0.8 {
+                    world.add(Sphere::new(
+                        center,
+                        0.2,
+                        Material::Lambertian {
+                            albedo: Rgb::rand(&mut rng) * Rgb::rand(&mut rng),
+                        },
+                    ))
+                } else if mat_choice < 0.95 {
+                    world.add(Sphere::new(
+                        center,
+                        0.2,
+                        Material::Metal {
+                            albedo: Rgb::rand_in_range(&mut rng, 0.5, 1.0),
+                            fuzz: rng.random_range(0.0..0.5),
+                        },
+                    ))
+                } else {
+                    world.add(Sphere::new(
+                        center,
+                        0.2,
+                        Material::Dielectric {
+                            refraction_index: 1.5,
+                        },
+                    ));
+                }
+            }
         }
     }
+
+    world.add(Sphere::new(
+        Vec3::new(0.0, 1.0, 0.0),
+        1.0,
+        Material::Dielectric {
+            refraction_index: 1.5,
+        },
+    ));
+
+    world.add(Sphere::new(
+        Vec3::new(-4.0, 1.0, 0.0),
+        1.0,
+        Material::Lambertian {
+            albedo: Rgb::new(0.4, 0.2, 0.1),
+        },
+    ));
+
+    world.add(Sphere::new(
+        Vec3::new(4.0, 1.0, 0.0),
+        1.0,
+        Material::Metal {
+            albedo: Rgb::new(0.7, 0.6, 0.5),
+            fuzz: 0.0,
+        },
+    ));
+
+    world
 }
 
 fn main() -> anyhow::Result<()> {
     let aspect_ratio = 16.0 / 9.0 as f64;
-    let image_width: usize = 400;
-    let image_height = ((image_width as f64) / aspect_ratio) as usize;
+    let image_width: usize = 1200;
 
-    // Camera
-    let focal_length = 1.0;
-    let viewport_height = 2.0;
-    let viewport_width = viewport_height * ((image_width as f64) / (image_height as f64));
-    let camera_center = Point3::new(0.0, 0.0, 0.0);
-    let viewport_u = Vec3::new(viewport_width, 0.0, 0.0);
-    let viewport_v = Vec3::new(0.0, -viewport_height, 0.0);
+    let mut camera = Camera::new(aspect_ratio, image_width, 500, 50);
+    camera.vfov = 20.0;
+    camera.look_from = Point3::new(13.0, 2.0, 3.0);
+    camera.look_at = Point3::new(0.0, 0.0, -1.0);
+    camera.vup = Vec3::new(0.0, 1.0, 0.0);
+    camera.defocus_angle = 0.6;
+    camera.focus_dist = 10.0;
 
-    let pixel_delta_u = viewport_u / (image_width as f64);
-    let pixel_delta_v = viewport_v / (image_height as f64);
+    let world = random_world();
 
-    let viewport_upper_left =
-        camera_center - Vec3::new(0.0, 0.0, focal_length) - viewport_u / 2.0 - viewport_v / 2.0;
-    let pixel_origin = viewport_upper_left + pixel_delta_u / 2.0 + pixel_delta_v / 2.0;
-
-    let mut img = Image::new(image_width, image_height);
-
-    // Create the world
-    let mut world = Hittables::new();
-
-    world.add(Sphere::new(Point3::new(0.0, 0.0, -1.0), 0.5));
-    world.add(Sphere::new(Point3::new(0.0, -100.5, -1.0), 100.0));
-
-    for j in 0..image_height {
-        for i in 0..image_width {
-            let pixel = pixel_origin + ((i as f64) * pixel_delta_u) + ((j as f64) * pixel_delta_v);
-            let ray_dir = pixel - camera_center;
-            let ray = Ray::new(camera_center, ray_dir);
-
-            let color = ray_color(&ray, &world);
-
-            img[(i, j)] = color;
-        }
-    }
+    let img = camera.render(&world);
 
     let mut writer = PpmFileWriter::new(Path::new("out.ppm"))?;
     writer.write(&img)?;

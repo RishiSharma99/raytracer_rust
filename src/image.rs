@@ -25,8 +25,8 @@ impl Image {
         self.data.iter()
     }
 
-    pub fn len(&self) -> usize {
-        self.data.len()
+    pub fn as_mut_slice(&mut self) -> &mut [Rgb] {
+        &mut self.data
     }
 }
 
